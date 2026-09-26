@@ -30,18 +30,17 @@ jobs:
           "$SDKMGR" --sdk_root="$SDK" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Build the APK
-        run: python3 build.py --out SoterChecker-1.0
+        run: python3 build.py --out SoterChecker
 
       - name: Verify the manifest
         run: |
           set -euo pipefail
           BT="$(ls -d "$ANDROID_SDK_ROOT"/build-tools/*/ | tail -1)"
-          "${BT}aapt2" dump badging build/SoterChecker-1.0-signed.apk | head -4
+          "${BT}aapt2" dump badging build/SoterChecker-signed.apk | head -4
 
       - name: Upload the APK
         uses: actions/upload-artifact@v4
         with:
-          name: SoterChecker-1.0-apk
+          name: SoterChecker-apk
           path: build/*-signed.apk
           if-no-files-found: error
-

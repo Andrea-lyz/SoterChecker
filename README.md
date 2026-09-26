@@ -29,7 +29,7 @@
 
 ## 安装与使用
 
-1. 从 Releases 下载 `SoterChecker-1.0.apk` 安装；
+1. 从 Releases 下载最新的 `SoterChecker-*.apk` 安装；
 2. 打开即自动检查（约 3–25 秒，取决于绑定耗时），结束后是结果页：判词条 → 矛盾对阵 → 维度板 → 检查明细；
 3. 若本机 Soter 要求**指纹**才会签名（原厂 TA 的正常行为，或软件 TA 的生物门控），签名链会显示"待补"，
    点「**调用指纹补全签名链**」并按一次指纹，剩余检查会继续跑完并自动刷新判词；
@@ -43,18 +43,18 @@ JDK 17、Python 3.9+。
 
 ```bash
 python build.py                                    # build/soterchecker-signed.apk
-python build.py --out SoterChecker-1.0             # 指定产物名
+python build.py --out MyBuild                      # 指定产物名
 python build.py --rename-package com.example.copy  # 装一份独立 uid 的同款（换视角观测）
 ```
 
-Windows 上也可以用 `powershell -File build.ps1 -OutName SoterChecker-1.0`（最终仍调用 build.py）。
+Windows 上也可以用 `powershell -File build.ps1 -OutName MyBuild`（最终仍调用 build.py）。
 
 用仓库内的 `debug.keystore` 签名：这是诊断工具、不申请任何特权权限，本地与 CI 用同一把钥匙意味着
 **后续构建都能覆盖安装**。
 
 ## CI
 
-`.github/workflows/ci.yml`：push / PR / tag 触发，构建 APK 并以 artifact `SoterChecker-1.0-apk` 上传，
+`.github/workflows/ci.yml`：push / PR / tag 触发，构建 APK 并以 artifact `SoterChecker-apk` 上传，
 构建后额外用 `aapt2 dump badging` 校验包名与版本。
 
 ## 边界（诚实说明）
@@ -115,7 +115,7 @@ shown nothing) and reporting their contradiction.
 Semantics broken · Semantics deviating · Cannot self-prove. "Cannot self-prove" is deliberately not
 "clean".
 
-**Install and use**: download `SoterChecker-1.0.apk` from Releases, install it (Android 10+, no root)
+**Install and use**: download the latest `SoterChecker-*.apk` from Releases, install it (Android 10+, no root)
 and open it. If the Soter on this device signs only after a biometric match (the normal behaviour of a
 stock TA, or a software TA with a biometric gate), the signature chain shows "pending" — press
 **"Call fingerprint and complete the chain"**, touch the sensor once, and the remaining checks run and
@@ -138,4 +138,3 @@ hooked, in-process observation cannot be trusted: the verdict degrades to "by fi
 classes and AIDL stubs extracted from the device/SDK purely to compile this probe; their copyright
 belongs to Tencent and they are outside this repository's licensing. No open-source licence is granted
 for the rest either — please contact the author before reuse.
-
