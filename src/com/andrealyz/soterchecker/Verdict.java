@@ -209,6 +209,11 @@ final class Verdict {
 
             boolean pmReports = "pass".equals(status(checks, "S1"))
                     || "pass".equals(status(checks, "S8"));
+            boolean visibilityLimited = !"pass".equals(status(checks, "X13"));
+            // A PM that reports nothing while this app cannot even enumerate packages is
+            // blind, not contradicted: the filter may be an OEM appop the user set, and
+            // the blind channel must never be read as the device hiding something.
+            boolean pmBlind = visibilityLimited && !pmReports;
             String signer = field(observed(checks, "S6"), "signerSha256");
             boolean signerStock = isStockSigner(signer);
             boolean pathEvidence = "pass".equals(status(checks, "X3"))
@@ -235,7 +240,7 @@ final class Verdict {
                     && !"0".equals(field(observed(checks, "X1"), "withDisabled"))) {
                 contradictions.put("component_only_visible_with_disabled_flag");
             }
-            if (pathEvidence && !pmReports) {
+            if (pathEvidence && !pmReports && !pmBlind) {
                 contradictions.put("PM_hidden_while_stock_apk_present");
             }
             if ("fail".equals(status(checks, "X12"))) {
@@ -244,7 +249,9 @@ final class Verdict {
 
             String state;
             if (!pmReports && !pathEvidence && !dirEvidence) {
-                state = expected ? "disguised-by-prior" : "cannot-self-prove";
+                // The firmware prior cannot carry a verdict when the PM channel was
+                // blinded by this app's own capability: say so instead of guessing.
+                state = expected && !pmBlind ? "disguised-by-prior" : "cannot-self-prove";
             } else if (!present) {
                 state = "component-mismatch";
             } else if (contradictions.length() > 0) {
@@ -297,7 +304,6 @@ final class Verdict {
             }
 
             out.put("state", state);
-            boolean visibilityLimited = !"pass".equals(status(checks, "X13"));
             out.put("visibility_limited", visibilityLimited);
             // Without direct evidence the confidence rests on the prior, and a filtered
             // package list leaves only the declared labels to build that prior from.

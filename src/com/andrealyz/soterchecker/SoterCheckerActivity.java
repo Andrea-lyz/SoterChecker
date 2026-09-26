@@ -416,13 +416,18 @@ public class SoterCheckerActivity extends Activity {
                     PackageManager.GET_SIGNING_CERTIFICATES | PackageManager.GET_META_DATA);
             sourceDir = pi.applicationInfo.sourceDir;
             boolean system = (pi.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
-            boolean pathOk = isProfilePath(sourceDir);
-            check("S1", "visibility", pathOk && system ? "pass" : "warn",
-                    "getPackageInfo ok, FLAG_SYSTEM, sourceDir matches a sampled vendor profile",
+            // Visibility is the fact this check owns: the PM answered, so the package is
+            // not hidden from this uid. Whether the layout is one this build has sampled
+            // is a different question, owned by X3/X11 - folding it in here would turn
+            // "this ROM puts the APK somewhere new" into "the PM is hiding something".
+            boolean sampledPath = isProfilePath(sourceDir);
+            check("S1", "visibility", system ? "pass" : "warn",
+                    "getPackageInfo ok and FLAG_SYSTEM",
                     "sourceDir=" + sourceDir + " system=" + system
+                            + " sampledPath=" + sampledPath
                             + " ver=" + pi.versionName + "/" + pi.getLongVersionCode()
                             + " svcUid=" + pi.applicationInfo.uid,
-                    "expected svcUid=10279, versionName=1.0.1");
+                    "an unsampled vendor layout is reported by X3/X11, not as hiding");
 
             String sigHash = "-";
             try {
@@ -473,14 +478,23 @@ public class SoterCheckerActivity extends Activity {
             boolean stock = isProfileHash(hash);
             // A package PM will not describe has no known path either: that is a blinded
             // channel, not evidence of masking, so it must not be reported as a failure.
+            // "Differs" only means something for a layout this build sampled: an
+            // unsampled vendor path is an information gap, not a finding.
+            String profile = exists ? profileOf(sourceDir, hash, len) : "-";
             String status = !reportedInstalled ? "info"
-                    : (!exists ? "fail" : (stock ? "pass" : "warn"));
+                    : (!exists ? "fail"
+                    : ("match".equals(profile) ? "pass"
+                    : ("differs".equals(profile) ? "warn" : "info")));
             check("S2", "visibility", status,
-                    "readable, len=74826, sha256=" + STOCK_SHA256.substring(0, 16) + "..., magic=504b0304",
+                    "the APK PM reports for this package is readable from this uid",
                     "exists=" + exists + " len=" + len + " magic=" + magic
                             + " sha256=" + (hash.length() > 16 ? hash.substring(0, 16) + "..." : hash)
+                            + " profile=" + profile
                             + (reportedInstalled ? "" : " (path unknown: PM returned no package)"),
-                    stock ? "content identical to the stock copy" : "content differs from the stock hash");
+                    stock ? "content identical to a sampled stock copy"
+                            : ("differs".equals(profile)
+                            ? "content differs from the sampled bytes for this path"
+                            : "readable; this vendor layout is not sampled, see X3/X11"));
             // No privileges needed: PM reports an installed system package whose own
             // sourceDir this uid cannot see. Stock devices cannot produce that pair.
             check("X2", "visibility", (!reportedInstalled || exists) ? "pass" : "fail",
@@ -1068,11 +1082,16 @@ public class SoterCheckerActivity extends Activity {
 
         SoterDeviceResult dev = svc.getDeviceId();
         String devHex = dev != null && dev.exportData != null ? hex(dev.exportData) : "-";
-        check("T9", "transactions", dev != null && dev.resultCode == 0
-                && dev.exportData != null && dev.exportData.length == 16 ? "pass" : "fail",
-                "getDeviceId returns 16 raw bytes",
+        boolean devLiving = dev != null && dev.resultCode == 0;
+        int devLen = dev == null || dev.exportData == null ? 0 : dev.exportData.length;
+        check("T9", "transactions",
+                !devLiving ? "fail" : (devLen == 16 ? "pass" : (devLen == 0 ? "info" : "warn")),
+                "getDeviceId returns 16 raw bytes, or an empty id on ROMs that stopped reporting one",
                 dev == null ? "null" : "rc=" + dev.resultCode + " len=" + dev.exportDataLength
-                        + " hex=" + mask(devHex), "");
+                        + " hex=" + mask(devHex),
+                devLiving && devLen == 0
+                        ? "living answer with no id (Xiaomi Android 17 capture); the identity still rides in the blob cpu_id"
+                        : "");
         if (askBlob != null && !"-".equals(devHex)) {
             check("C5b", "crypto", devHex.equals(askBlob.obj.optString("cpu_id")) ? "pass" : "fail",
                     "cpu_id equals the getDeviceId hex",

@@ -401,7 +401,7 @@ var GROUP_ORDER = ["visibility", "transactions", "crypto", "sdk", "reference", "
 function faceOff(token) {
   switch (token) {
     case "PM_hidden_while_stock_apk_present":
-      return { a: ["包管理查询", "查无此包", "missing"], b: ["文件系统检查", "原厂 APK 在原位，与厂商样本一致", "present"] };
+      return { a: ["包管理查询", "查无此包", "missing"], b: ["文件系统检查", "原厂路径上的 Soter 组件在位", "present"] };
     case "PM_reports_installed_but_apk_invisible":
       return { a: ["包管理查询", "这个包已安装", "present"], b: ["文件系统检查", "它的 APK 路径却不可见", "missing"] };
     case "component_unresolvable_while_package_present":
