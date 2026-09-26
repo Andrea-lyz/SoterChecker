@@ -25,10 +25,11 @@ final class Profiles {
                     "178ccdfa02e4a42eabbb4f37d766df83695116224e771aa8a499e239f0ffbe69",
                     "d45f076fe23a1a5b7f486e3ff41547a2023dbfe1fe73353b1e48ebdfed72cc6f"},
             /* HyperOS 4 / Android 17 moved the package to /product. Sampled 2026-09-26
-             * from a live device: size and signer are the device's own report, the APK
-             * hash never left it, so this row identifies the layout without claiming to
-             * verify the bytes. */
-            {"hyperos/miui", "/product/app/SoterService/SoterService.apk", "45582", "",
+             * from a live device (2509FPN0BC): size, APK hash and signer all come from
+             * that device, the APK hash cross-checked against the run's own truncated
+             * reading (470a2bd7abba3222...). */
+            {"hyperos/miui", "/product/app/SoterService/SoterService.apk", "45582",
+                    "470a2bd7abba3222c0cf3a1a54fc5efcfd897dc8c89d1e7d05d54aa81f0d9b78",
                     "c9009d01ebf9f5d0302bc71b2fe9aa9a47a432bba17308a3111b75d7b2149025"},
     };
 
