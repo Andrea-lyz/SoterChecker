@@ -517,8 +517,12 @@ public class SoterCheckerActivity extends Activity {
             boolean stockExists = stockApk.exists();
             String stockHash = stockExists ? sha256File(stockApk) : "-";
             String profile = profileOf(stockPath, stockHash, stockApk.length());
+            // A layout that is identified by path and size but whose bytes were never
+            // sampled is a note, not a deviation: "warn" stays reserved for bytes that
+            // disagree with a sampled row.
             check("X3", "visibility", !stockExists ? "info"
-                            : ("match".equals(profile) ? "pass" : "warn"),
+                            : ("match".equals(profile) ? "pass"
+                            : ("size-only".equals(profile) ? "info" : "warn")),
                     "the stock path carries an APK matching a sampled vendor profile",
                     "path=" + stockPath + " exists=" + stockExists
                             + " size=" + stockApk.length()

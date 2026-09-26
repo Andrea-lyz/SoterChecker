@@ -123,6 +123,12 @@ final class Verdict {
             case "D2":
                 return "pass".equals(st) ? "usable" : "fail".equals(st) ? "blinded-or-disabled" : "unknown";
             case "D3":
+                // A size-only match means the file is there and its size agrees with a
+                // sampled layout: the channel answered, so "blinded" would overstate it.
+                if (obs != null && obs.contains("profile=size-only")) {
+                    return "present";
+                }
+                return "pass".equals(st) ? "present" : "info".equals(st) ? "blinded" : "unknown";
             case "D4":
             case "D9":
             case "D10":
@@ -216,9 +222,13 @@ final class Verdict {
             boolean pmBlind = visibilityLimited && !pmReports;
             String signer = field(observed(checks, "S6"), "signerSha256");
             boolean signerStock = isStockSigner(signer);
-            boolean pathEvidence = "pass".equals(status(checks, "X3"))
-                    || "warn".equals(status(checks, "X3"));
             String profile = field(observed(checks, "X3"), "profile");
+            // Presence, seen without PackageManager: a full profile match, a warning that
+            // its bytes disagree with one, or a layout whose size agrees while its bytes
+            // were never sampled. Only the first two say anything about the content.
+            boolean pathEvidence = "pass".equals(status(checks, "X3"))
+                    || "warn".equals(status(checks, "X3"))
+                    || "size-only".equals(profile);
             boolean dirEvidence = "pass".equals(status(checks, "X4"));
             boolean layoutEvidence = "pass".equals(status(checks, "X10"));
             boolean present = (pmReports && signerStock) || pathEvidence || dirEvidence;
