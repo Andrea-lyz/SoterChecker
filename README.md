@@ -11,8 +11,12 @@
   跨层复核（Java / libc / 独立原生进程三层读同一个事实）。
 - **事务语义**：`com.tencent.soter.soterserver.ISoterService` 的完整调用矩阵
   （ASK / AuthKey 的生成与导出、签名会话、设备 id、删除、未知参数与错误码 `-6`/`-1000` 等）。
-- **签名链**：ASK←ATTK（有 ATTK 公钥时）、AuthKey←ASK、结果←AuthKey，全部用 EMSA-PSS/SHA-256/salt=20
-  自行实现校验（不依赖 Conscrypt 的 PSS 拼写）；键集与键序、`raw` 与 challenge、计数器单调。
+  负向码按厂商区分：`-6`/`-1000` 是原厂拼法，别的负数（如中继设备答的 `-8`/`-204`）只记偏差，
+  不算「TA 死了」。
+- **签名链**：ASK←ATTK（有 ATTK 公钥时）、AuthKey←ASK、结果←AuthKey，全部用 EMSA-PSS/SHA-256
+  自行实现校验（先按 blob 自己声明的 `rsa_pss_saltlen` 验，再退原厂的 salt=20/32；不依赖 Conscrypt
+  的 PSS 拼写）；键集与键序（其它厂商的附加键如 `rsa_pss_saltlen`/`fc_n` 记 info）、`raw` 与
+  challenge、计数器单调。
 - **判词**：状态 + 置信度 + 一句话结论 + 矛盾证据对阵（哪条通道说在位、哪条通道说看不见）。
 
 ## 判词状态

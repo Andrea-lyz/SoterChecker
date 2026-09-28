@@ -987,9 +987,14 @@ public class SoterCheckerActivity extends Activity {
                         "jsonLen=" + askBlob.jsonLen + " jsonBytes=" + askBlob.body.length
                                 + " sigBytes=" + askBlob.signature.length + " total=" + askBlob.total,
                         "");
-                check("C6a", "crypto", keysMatch(askBlob.obj, ASK_KEYS) ? "pass" : "warn",
+                boolean askKeysOk = keysMatch(askBlob.obj, ASK_KEYS);
+                boolean askVendorExtras = askKeysOk
+                        || extraKeysAreVendorOptional(askBlob.obj, ASK_KEYS);
+                check("C6a", "crypto", askKeysOk ? "pass" : (askVendorExtras ? "info" : "warn"),
                         "export keys exactly " + Arrays.toString(ASK_KEYS),
-                        "keys=" + keysOf(askBlob.obj), "a certs array means another backend");
+                        "keys=" + keysOf(askBlob.obj) + " " + keyDiff(askBlob.obj, ASK_KEYS),
+                        "a certs array means another backend; "
+                                + Arrays.toString(VENDOR_OPTIONAL_KEYS) + " are other vendors' additions");
             } catch (Throwable t) {
                 check("C1", "crypto", "fail", "ASK blob parses", String.valueOf(t), "");
             }
@@ -1004,9 +1009,9 @@ public class SoterCheckerActivity extends Activity {
             try {
                 String selfScheme = Blobs.probePss(Blobs.pemToRsaKey(askBlob.obj.getString("pub_key")),
                         askBlob.body, askBlob.signature);
-                boolean selfRaw = Blobs.verifyPssRaw(
+                boolean selfRaw = verifyChainLink(
                         Blobs.pemToRsaKey(askBlob.obj.getString("pub_key")),
-                        askBlob.body, askBlob.signature, 20);
+                        askBlob, askBlob.obj).verified();
                 check("C2b", "crypto", "info", "an ASK blob is signed by the device key, not by itself",
                         "selfVerify=" + (selfRaw || selfScheme != null ? "yes" : "no"),
                         "captured chain is ASK <- ATTK, AuthKey <- ASK, result <- AuthKey");
@@ -1066,15 +1071,19 @@ public class SoterCheckerActivity extends Activity {
         int missCode = miss == null ? 0 : miss.resultCode;
         check("T5", "transactions",
                 missCode == -6 && miss != null && miss.exportDataLength == 0 ? "pass"
-                        : (missCode == -5 ? "warn" : "fail"),
+                        : (missCode < 0 ? "warn" : "fail"),
                 "getAuthKey(unknown kname) = -6 with length 0",
                 miss == null ? "null" : describe(miss),
-                "the live vendor TA answers -6 (PHB110 capture); -5 is the dead-TA spelling");
+                "the live vendor TA answers -6 (PHB110 capture); -5 is the dead-TA spelling, "
+                        + "and any other negative code is another vendor's vocabulary (a relayed "
+                        + "device answered -8) - still a refusal, so a warn, never a dead TA");
         SoterSignResult bogus = svc.finishSign(424242L);
-        check("T6", "transactions", bogus != null && bogus.resultCode == -1000 ? "pass" : "fail",
+        int bogusCode = bogus == null ? 0 : bogus.resultCode;
+        check("T6", "transactions", bogusCode == -1000 ? "pass" : (bogusCode < 0 ? "warn" : "fail"),
                 "finishSign(unknown session) = -1000",
                 bogus == null ? "null" : "rc=" + bogus.resultCode + " len=" + bogus.exportDataLength,
-                "the vendor TA uses -1000 here, not -22");
+                "the vendor TA uses -1000 here, not -22; another vendor's negative code is a "
+                        + "deviation (a relayed device answered -204), never a signature");
         SoterExtraParam fp = svc.getExtraParam("fingerprint_type");
         String fpValue = fp == null ? "null" : String.valueOf(fp.result);
         check("T7", "transactions", "2".equals(fpValue) ? "pass" : "warn",
@@ -1120,18 +1129,22 @@ public class SoterCheckerActivity extends Activity {
                 dump.put("authB64", Base64.encodeToString(authBlob.blob, Base64.NO_WRAP));
             } catch (Throwable ignored) {
             }
-            check("C6b", "crypto", keysMatch(authBlob.obj, ASK_KEYS) ? "pass" : "warn",
+            boolean authKeysOk = keysMatch(authBlob.obj, ASK_KEYS);
+            boolean authVendorExtras = authKeysOk
+                    || extraKeysAreVendorOptional(authBlob.obj, ASK_KEYS);
+            check("C6b", "crypto", authKeysOk ? "pass" : (authVendorExtras ? "info" : "warn"),
                     "AuthKey export keys exactly " + Arrays.toString(ASK_KEYS),
-                    "keys=" + keysOf(authBlob.obj), "");
+                    "keys=" + keysOf(authBlob.obj) + " " + keyDiff(authBlob.obj, ASK_KEYS), "");
             if (askBlob != null) {
                 try {
-                    boolean ok = Blobs.verifyPssRaw(
+                    PssCheck pss = verifyChainLink(
                             Blobs.pemToRsaKey(askBlob.obj.getString("pub_key")),
-                            authBlob.body, authBlob.signature, 20);
-                    check("C3", "crypto", ok ? "pass" : "fail",
+                            authBlob, askBlob.obj);
+                    check("C3", "crypto", pss.status,
                             "AuthKey signature verifies with the ASK public key",
-                            "EMSA-PSS/SHA-256/salt=20 -> " + ok,
-                            "the server-side sample verifies exactly this");
+                            pss.observed,
+                            "the stock sample uses salt=20; a blob that declares "
+                                    + "rsa_pss_saltlen is verified with its own salt first");
                 } catch (Throwable t) {
                     check("C3", "crypto", "fail", "AuthKey verify", String.valueOf(t), "");
                 }
@@ -1186,12 +1199,12 @@ public class SoterCheckerActivity extends Activity {
                     "stock answers QSEE/5 and fingerprint/1");
             if (authBlob != null) {
                 try {
-                    boolean ok = Blobs.verifyPssRaw(
+                    PssCheck pss = verifyChainLink(
                             Blobs.pemToRsaKey(authBlob.obj.getString("pub_key")),
-                            sign.body, sign.signature, 20);
-                    check("C4", "crypto", ok ? "pass" : "fail",
+                            sign, authBlob.obj);
+                    check("C4", "crypto", pss.status,
                             "the sign result verifies with the AuthKey public key",
-                            "EMSA-PSS/SHA-256/salt=20 -> " + ok, "");
+                            pss.observed, "");
                 } catch (Throwable t) {
                     check("C4", "crypto", "fail", "sign result verify", String.valueOf(t), "");
                 }
@@ -1488,12 +1501,12 @@ public class SoterCheckerActivity extends Activity {
                         + " fp_n=" + sign.obj.optString("fp_n") + " fp_v=" + sign.obj.optString("fp_v")
                         + " saltlen=" + sign.obj.optString("rsa_pss_saltlen"), "");
         try {
-            boolean ok = Blobs.verifyPssRaw(
+            PssCheck pss = verifyChainLink(
                     Blobs.pemToRsaKey(authBlob.obj.getString("pub_key")),
-                    sign.body, sign.signature, 20);
-            check("C4", "crypto", ok ? "pass" : "fail",
+                    sign, authBlob.obj);
+            check("C4", "crypto", pss.status,
                     "the sign result verifies with the AuthKey public key",
-                    "EMSA-PSS/SHA-256/salt=20 -> " + ok, "");
+                    pss.observed, "");
         } catch (Throwable t) {
             check("C4", "crypto", "fail", "sign result verify", String.valueOf(t), "");
         }
@@ -1546,6 +1559,45 @@ public class SoterCheckerActivity extends Activity {
         return keys.toString();
     }
 
+    /** One chain link's verification: the salt that verified it, if any. */
+    private static final class PssCheck {
+        String status = "fail";
+        String observed = "not verified";
+
+        boolean verified() {
+            return !"fail".equals(status);
+        }
+    }
+
+    /**
+     * Verify one blob's signature against its parent public key.
+     *
+     * The stock ROM's chain is EMSA-PSS/SHA-256 with a 20-byte salt, but the salt
+     * is a vendor choice: the same wire format carries `rsa_pss_saltlen` on other
+     * vendors' devices (a relayed device declares 32), so the declaration is tried
+     * first and the stock 20 stays as the fallback. A signature that only verifies
+     * under a salt the blob does not declare is a deviation, not a break.
+     */
+    private static PssCheck verifyChainLink(PublicKey parent, Blobs signed, JSONObject parentObj) {
+        PssCheck out = new PssCheck();
+        int declared = (int) parseLong(signed.obj.optString("rsa_pss_saltlen"),
+                parentObj == null ? 0 : (int) parseLong(parentObj.optString("rsa_pss_saltlen"), 0));
+        int[] rungs = declared > 0 ? new int[]{declared, 20, 32} : new int[]{20, 32};
+        for (int salt : rungs) {
+            if (Blobs.verifyPssRaw(parent, signed.body, signed.signature, salt)) {
+                boolean asDeclared = declared <= 0 || salt == declared;
+                out.status = asDeclared ? "pass" : "warn";
+                out.observed = "EMSA-PSS/SHA-256/salt=" + salt + " -> true"
+                        + (asDeclared ? "" : " (declared saltlen=" + declared + ")");
+                return out;
+            }
+        }
+        out.status = "fail";
+        out.observed = "EMSA-PSS/SHA-256/salt="
+                + (declared > 0 ? declared + "/20/32" : "20/32") + " -> false";
+        return out;
+    }
+
     private static boolean keysMatch(JSONObject o, String[] want) {
         TreeSet<String> have = new TreeSet<String>();
         for (Iterator<String> it = o.keys(); it.hasNext(); ) {
@@ -1569,7 +1621,12 @@ public class SoterCheckerActivity extends Activity {
 
     /** True when every key present is either expected or a known other-vendor key. */
     private static boolean extraKeysAreVendorOptional(JSONObject o) {
-        TreeSet<String> allowed = new TreeSet<String>(Arrays.asList(SIGN_KEYS));
+        return extraKeysAreVendorOptional(o, SIGN_KEYS);
+    }
+
+    /** Same check against an arbitrary key set: the export blobs use ASK_KEYS. */
+    private static boolean extraKeysAreVendorOptional(JSONObject o, String[] expected) {
+        TreeSet<String> allowed = new TreeSet<String>(Arrays.asList(expected));
         allowed.addAll(Arrays.asList(VENDOR_OPTIONAL_KEYS));
         for (Iterator<String> it = o.keys(); it.hasNext(); ) {
             if (!allowed.contains(it.next())) {
